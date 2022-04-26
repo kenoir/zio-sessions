@@ -26,6 +26,22 @@ import java.time.OffsetDateTime
 //  runtime.unsafeRunSync(program)
 //}
 
+// new service
+
+case class Config(apiKey: String)
+
+object ConfigLive {
+  val load =
+    for {
+      optApiKey <- zio.System.env("API_KEY")
+      apiKey <- ZIO.fromOption(optApiKey).orElseFail(new IllegalArgumentException("No API_KEY in env"))
+    } yield Config(apiKey)
+
+  val layer: ZLayer[Any, Throwable, Config] =  ZLayer.fromZIO(load)
+
+}
+
+
 // service definition
 
 import com.gu.contentapi.client.{ContentApiClient, GuardianContentClient}
@@ -45,15 +61,12 @@ object Capi {
     ZIO.serviceWithZIO[Capi](_.searchForTags(query))
 }
 
-
-
 object CapiLive {
-  val layer: ZLayer[Any, Throwable, Capi] =
+  val layer: ZLayer[Config, Throwable, Capi] =
     ZLayer.fromZIO(
       for {
-        optApiKey <- zio.System.env("API_KEY")
-        apiKey <- ZIO.fromOption(optApiKey).orElseFail(new IllegalArgumentException("No API_KEY in env"))
-        client = new GuardianContentClient(apiKey)
+        config <- ZIO.service[Config]
+        client = new GuardianContentClient(config.apiKey)
       } yield new Capi {
 
       override def searchForContent(query: String): ZIO[Any, Throwable, List[Content]] =
@@ -80,7 +93,7 @@ object Main extends ZIOAppDefault {
     } yield ()
 
   override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] =
-    program.forever.provide(CapiLive.layer)
+    program.forever.provide(CapiLive.layer, ConfigLive.layer)
 }
 
 // Reading list
