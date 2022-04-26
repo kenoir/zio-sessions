@@ -45,14 +45,28 @@ object Capi {
     ZIO.serviceWithZIO[Capi](_.searchForTags(query))
 }
 
+
+
 object CapiLive {
   val layer: ZLayer[Any, Throwable, Capi] =
-    ZLayer.succeed(new Capi {
+    ZLayer.fromZIO(
+      for {
+        optApiKey <- zio.System.env("API_KEY")
+        apiKey <- ZIO.fromOption(optApiKey).orElseFail(new IllegalArgumentException("No API_KEY in env"))
+        client = new GuardianContentClient(apiKey)
+      } yield new Capi {
+
       override def searchForContent(query: String): ZIO[Any, Throwable, List[Content]] =
-        ZIO.succeed(Nil)
+        ZIO.fromFuture { implicit ec =>
+          val search = ContentApiClient.search.q(query)
+          client.getResponse(search).map(_.results.toList)
+        }
 
       override def searchForTags(query: String): ZIO[Any, Throwable, List[Tag]] =
-        ZIO.succeed(Nil)
+        ZIO.fromFuture { implicit ec =>
+          val search = ContentApiClient.tags.q(query)
+          client.getResponse(search).map(_.results.toList)
+        }
     })
 }
 
@@ -65,7 +79,8 @@ object Main extends ZIOAppDefault {
       _ <- ZIO.foreachDiscard(results)(result => Console.printLine(s"${result.webTitle}"))
     } yield ()
 
-  override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] = program.provide(CapiLive.layer)
+  override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] =
+    program.forever.provide(CapiLive.layer)
 }
 
 // Reading list
