@@ -45,6 +45,17 @@ object Capi {
     ZIO.serviceWithZIO[Capi](_.searchForTags(query))
 }
 
+object CapiLive {
+  val layer: ZLayer[Any, Throwable, Capi] =
+    ZLayer.succeed(new Capi {
+      override def searchForContent(query: String): ZIO[Any, Throwable, List[Content]] =
+        ZIO.succeed(Nil)
+
+      override def searchForTags(query: String): ZIO[Any, Throwable, List[Tag]] =
+        ZIO.succeed(Nil)
+    })
+}
+
 object Main extends ZIOAppDefault {
   private val program =
     for {
@@ -54,5 +65,8 @@ object Main extends ZIOAppDefault {
       _ <- ZIO.foreachDiscard(results)(result => Console.printLine(s"${result.webTitle}"))
     } yield ()
 
-  override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] = program
+  override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] = program.provide(CapiLive.layer)
 }
+
+// Reading list
+// - https://zio.dev/next/datatypes/
